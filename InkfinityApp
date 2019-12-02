@@ -1,6 +1,10 @@
 from tkinter import *
 from tkinter.colorchooser import askcolor
+from tkinter import filedialog
 import copy
+from PIL import ImageTk, Image, ImageOps
+import requests
+from io import BytesIO
 
 def __init__(app, root, canvas):
     app.board = Board(app)
@@ -12,6 +16,10 @@ def __init__(app, root, canvas):
 
     app.brushButton = Button(root, text='brush', command = lambda:useBrush(app))
     app.brushButton.pack()
+
+    app.pictureButton = Button(root, text='import picture', 
+        command = lambda:usePicture(app, root, canvas))
+    app.pictureButton.pack()
 
     app.penButton = Button(root, text='pen', command = lambda:usePen(app))
     app.penButton.pack()
@@ -32,10 +40,55 @@ def __init__(app, root, canvas):
 
     app.mouseDown = False   
     app.mouseDrag = False
+    app.hasImage = False
 
 def changeSize(app):
     if app.activeButton == 'brush':
         app.brush.brushRadius = app.changeSizeButton.get()
+
+def usePicture(app, root, canvas):
+    window = Toplevel(root)
+
+    responseText = StringVar()
+    app.entry = Entry(window, textvariable = responseText)
+    app.entry.grid(column=0, row=0)
+    app.urlButton = Button(window, text = 'import image from url', 
+        command = lambda:openUrlImage(app, window, canvas))   
+    app.urlButton.grid(column=1, row=0)
+
+    app.entryButton = Button(window, text = 'import image from local directory', 
+        command = lambda:openLocalImage(app,window, canvas))   
+    app.entryButton.grid(column=0, row=1)
+
+    app.mirrorButton = Button(window, text = 'mirror imported image', 
+        command = lambda:mirrorImage(app, window, canvas))
+    app.mirrorButton.grid(column=0, row=2)
+
+def openUrlImage(app, window, canvas):
+    response = requests.get(app.entry.get())
+    imageFromUrl = Image.open(BytesIO(response.content))
+    imageFromUrl = imageFromUrl.resize((500,500))
+    app.resizedImage = imageFromUrl
+    app.image = ImageTk.PhotoImage(imageFromUrl)
+    canvas.create_image(250,250,image=app.image)
+    app.hasImage = True
+
+def openLocalImage(app, window, canvas):
+    #CITATION: opening file name taken from https://pythonspot.com/tk-file-dialogs/
+    window.directory = filedialog.askopenfilename(initialdir = "/",
+        title = "Select file",
+        filetypes = (("jpeg files","*.jpg"),("all files","*.*")))
+    imageFromLocalFile = Image.open(window.directory)
+    imageFromLocalFile = imageFromLocalFile.resize((500, 500))
+    app.resizedImage = imageFromLocalFile
+    app.image =ImageTk.PhotoImage(imageFromLocalFile)
+    canvas.create_image(250,250,image=app.image)
+    app.hasImage = True
+
+def mirrorImage(app, window, canvas):
+    app.resizedImage = ImageOps.mirror(app.resizedImage)
+    app.image =ImageTk.PhotoImage(app.resizedImage)
+    canvas.create_image(250,250,image=app.image)
 
 def chooseColor(app):
     app.brush.hexColor = askcolor()[1]
@@ -47,6 +100,7 @@ def resetBoard(app, canvas):
     canvas.delete("all")
     app.mouseDrag = False
     app.mouseDown = False
+    app.activeButton = None
 
 def useBrush(app):
     app.activeButton = 'brush'
@@ -60,7 +114,6 @@ def useMagicWand(app):
     app.moveObject = False
     app.magicWand = MagicWand()
     app.activeButton = 'magicWand'
-
 
 def mouseDragged(app, event, canvas):
     if app.activeButton == 'brush':
@@ -89,12 +142,33 @@ def drawAll(app, canvas, event):
         if app.mouseDown or app.mouseDrag:
             app.brush.draw(event, canvas)
             app.board.updateBoard(app, canvas)
+
     elif app.activeButton == 'magicWand':
         if app.magicWand.isEnclosed == False:
             if app.mouseDown or app.mouseDrag:
                 app.magicWand.draw(event, canvas)
                 app.board.updateBoard(app, canvas)
+
         elif app.magicWand.isEnclosed and app.moveObject == True:
+            if app.magicWand.hasOldPoints==True:
+                startPointCoords = app.magicWand.oldDrawnPointsInArea[0][1][2]
+                startPoint = app.magicWand.oldDrawnPointsInArea[0][0]
+                # skipPoint = False
+
+                for point in range(1,len(app.magicWand.oldDrawnPointsInArea)):
+                    if point == startPoint+1:
+                        coords = app.magicWand.oldDrawnPointsInArea[point][1][2]
+                        canvas.create_line(startPointCoords[0], startPointCoords[1], 
+                            coords[0], coords[1],
+                            fill = 'white',
+                            width = app.magicWand.oldDrawnPointsInArea[point][1][3]+3,
+                            capstyle=ROUND, smooth = TRUE, splinesteps = 100)
+                        startPoint = point
+                        startPointCoords = coords
+                    else:
+                        startPoint = point
+                        startPointCoords = app.magicWand.drawnPointsInArea[point][1][2]
+
             app.magicWand.moveArea(app, event, canvas)
             #r = app.brush.brushRadius//2
             # for row in range(len(app.board.boardList)):
@@ -112,12 +186,14 @@ def drawAll(app, canvas, event):
                 # else:
                 if point == startPoint+1:
                     coords = app.magicWand.drawnPointsInArea[point][1][2]
-                    canvas.create_line(startPointCoords[0], startPointCoords[1], coords[0], coords[1],
+                    canvas.create_line(startPointCoords[0], startPointCoords[1], 
+                        coords[0], coords[1],
                         fill = app.magicWand.drawnPointsInArea[point][1][0], 
                         width = app.magicWand.drawnPointsInArea[point][1][3],
                         capstyle=ROUND, smooth = TRUE, splinesteps = 100)
                     startPoint = point
                     startPointCoords = coords
+                 
                 else:
                     startPoint = point
                     startPointCoords = app.magicWand.drawnPointsInArea[point][1][2]
@@ -143,12 +219,18 @@ class Board(object):
         if app.activeButton == 'brush':
             x,y = app.brush.cx, app.brush.cy
             r = app.brush.brushRadius
-            
-            for row in range(y-(r//2), y+(r//2)+1):
-                for col in range(x-(r//2), x+(r//2)+1):
-                    app.brush.pointNum+=1
-                    app.board.boardList[row][col] = [app.brush.hexColor, 'brush', (col, row), app.brush.pointNum, r]
-                    print(row,col, app.board.boardList[row][col])
+            if app.brush.brushRadius == 1:
+                for row in range(y, y+1):
+                    for col in range(x, x+1):
+                        app.brush.pointNum+=1
+                        app.board.boardList[row][col] = [app.brush.hexColor, 'brush', (col, row), app.brush.pointNum, r]
+                        print(row,col, app.board.boardList[row][col])
+            else:
+                 for row in range(y-(r//10), y+(r//10)):
+                    for col in range(x-(r//10), x+(r//10)):
+                        app.brush.pointNum+=1
+                        app.board.boardList[row][col] = [app.brush.hexColor, 'brush', (col, row), app.brush.pointNum, r]
+                        print(row,col, app.board.boardList[row][col])
         
         if app.activeButton == 'magicWand' and app.magicWand.isEnclosed == False:
             x,y = app.magicWand.cx, app.magicWand.cy
@@ -167,7 +249,6 @@ class Brush(object):
         self.texture = 'pen'
         #self.brushSize = app.brushSize
         self.brushRadius = 1
-
         self.pointNum = 0
 
         self.cx = None
@@ -226,6 +307,8 @@ class MagicWand(object):
         self.boardList = None
         self.defaultColor = "#%02x%02x%02x" % (255,255,255)
         self.drawnPointsInArea = None
+        self.oldDrawnPointsInArea = None
+        self.hasOldPoints = False
 
     def selectArea(self, cx, cy, boardList, canvas):
         if not self.isEnclosed:
@@ -282,6 +365,9 @@ class MagicWand(object):
         x,y = self.cx, self.cy
         distX = event.x-x
         distY = event.y-y
+        self.oldDrawnPointsInArea = copy.deepcopy(self.drawnPointsInArea)
+        print(self.oldDrawnPointsInArea)
+        self.hasOldPoints = True
         # self.newBoard = [[[self.defaultColor,'board'] for j in range(len(self.boardList[0]))] for i in range(len(self.boardList))]
         # self.testDraw(canvas)
         # for row in range(len(self.boardList)):
