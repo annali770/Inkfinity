@@ -10,12 +10,15 @@ def __init__(app, root, canvas):
     app.board = Board(app)
     app.brush = Brush(app)
     app.activeButton = None
-    app.blendingTool = BlendingTool()
+    app.blendingTool = BlendingTool(app)
     app.eraser = Eraser() 
     app.magicWand = MagicWand()
 
     app.brushButton = Button(root, text='brush', command = lambda:useBrush(app))
     app.brushButton.pack()
+
+    app.blendButton = Button(root, text='blend', command = lambda:useBlend(app))
+    app.blendButton.pack()
 
     app.pictureButton = Button(root, text='import picture', 
         command = lambda:usePicture(app, root, canvas))
@@ -28,15 +31,13 @@ def __init__(app, root, canvas):
         command = lambda:useMagicWand(app))
     app.magicWandButton.pack()
 
-    app.resetButton = Button(root, text='reset', command = lambda:resetBoard(app, canvas))
+    app.resetButton = Button(root, text='reset', 
+        command = lambda:resetBoard(app, canvas))
     app.resetButton.pack()
 
-    app.changeColorButton = Button(root, text='change color', command = lambda:chooseColor(app))
+    app.changeColorButton = Button(root, text='change color', 
+        command = lambda:chooseColor(app))
     app.changeColorButton.pack()
-
-    # app.changeSizeButton = Scale(root, from_=1, to=30, orient=HORIZONTAL)
-    # app.changeSizeButton.set(2)
-    # app.changeSizeButton.pack()
 
     app.mouseDown = False   
     app.mouseDrag = False
@@ -67,19 +68,19 @@ def usePicture(app, root, canvas):
 def openUrlImage(app, window, canvas):
     response = requests.get(app.entry.get())
     imageFromUrl = Image.open(BytesIO(response.content))
-    imageFromUrl = imageFromUrl.resize((500,500))
+    imageFromUrl = imageFromUrl.resize((app.width,app.height))
     app.resizedImage = imageFromUrl
     app.image = ImageTk.PhotoImage(imageFromUrl)
     canvas.create_image(250,250,image=app.image)
     app.hasImage = True
 
 def openLocalImage(app, window, canvas):
-    #CITATION: opening file name taken from https://pythonspot.com/tk-file-dialogs/
+    #CITATION: opening file name from https://pythonspot.com/tk-file-dialogs/
     window.directory = filedialog.askopenfilename(initialdir = "/",
         title = "Select file",
         filetypes = (("jpeg files","*.jpg"),("all files","*.*")))
     imageFromLocalFile = Image.open(window.directory)
-    imageFromLocalFile = imageFromLocalFile.resize((500, 500))
+    imageFromLocalFile = imageFromLocalFile.resize((app.width, app.height))
     app.resizedImage = imageFromLocalFile
     app.image =ImageTk.PhotoImage(imageFromLocalFile)
     canvas.create_image(250,250,image=app.image)
@@ -93,6 +94,9 @@ def mirrorImage(app, window, canvas):
 def chooseColor(app):
     app.brush.hexColor = askcolor()[1]
     print(app.brush.hexColor)
+
+def useBlend(app):
+    app.activeButton = 'blend'
 
 def resetBoard(app, canvas):
     app.board = Board(app)
@@ -120,24 +124,13 @@ def mouseDragged(app, event, canvas):
         app.brush.cx, app.brush.cy = event.x, event.y
     elif app.activeButton == 'magicWand':
         app.magicWand.cx, app.magicWand.cy = event.x, event.y
-        if app.magicWand.isEnclosed and ((event.y,event.x) in app.magicWand.moveAreaSet):
+        if app.magicWand.isEnclosed and ((event.y,event.x) in 
+            app.magicWand.moveAreaSet):
             app.moveObject = True
-            
             print("moving")
     app.mouseDrag = True
 
-# def mousePressed(app, event):
-#     if app.activeButton == 'brush':
-#         app.brush.cx, app.brush.cy = event.x, event.y
-#         app.board.updateBoard(app)
-#     elif app.activeButton == 'magicWand':
-#         app.magicWand.cx, app.magicWand.cy = event.x, event.y
-#         app.board.updateBoard(app)
-
-#     app.mouseDown = True
-
 def drawAll(app, canvas, event):
-    # changeSize(app)
     if app.activeButton == 'brush':
         if app.mouseDown or app.mouseDrag:
             app.brush.draw(event, canvas)
@@ -153,13 +146,12 @@ def drawAll(app, canvas, event):
             if app.magicWand.hasOldPoints==True:
                 startPointCoords = app.magicWand.oldDrawnPointsInArea[0][1][2]
                 startPoint = app.magicWand.oldDrawnPointsInArea[0][0]
-                # skipPoint = False
 
                 for point in range(1,len(app.magicWand.oldDrawnPointsInArea)):
                     if point == startPoint+1:
                         coords = app.magicWand.oldDrawnPointsInArea[point][1][2]
-                        canvas.create_line(startPointCoords[0], startPointCoords[1], 
-                            coords[0], coords[1],
+                        canvas.create_line(startPointCoords[0], 
+                            startPointCoords[1], coords[0], coords[1],
                             fill = 'white',
                             width = app.magicWand.oldDrawnPointsInArea[point][1][3]+3,
                             capstyle=ROUND, smooth = TRUE, splinesteps = 100)
@@ -170,20 +162,11 @@ def drawAll(app, canvas, event):
                         startPointCoords = app.magicWand.drawnPointsInArea[point][1][2]
 
             app.magicWand.moveArea(app, event, canvas)
-            #r = app.brush.brushRadius//2
-            # for row in range(len(app.board.boardList)):
-            #     for col in range(len(app.board.boardList[0])):
-            #         if 'brush' in app.board.boardList[row][col]: 
-            #             canvas.create_oval(col, row, 
-            #                 col, row, fill = app.board.boardList[row][col][0])
+
             startPointCoords = app.magicWand.drawnPointsInArea[0][1][2]
             startPoint = app.magicWand.drawnPointsInArea[0][0]
-            # skipPoint = False
+
             for point in range(1,len(app.magicWand.drawnPointsInArea)):
-                # if skipPoint==True:
-                #     skipPoint = False
-                #     continue
-                # else:
                 if point == startPoint+1:
                     coords = app.magicWand.drawnPointsInArea[point][1][2]
                     canvas.create_line(startPointCoords[0], startPointCoords[1], 
@@ -197,7 +180,6 @@ def drawAll(app, canvas, event):
                 else:
                     startPoint = point
                     startPointCoords = app.magicWand.drawnPointsInArea[point][1][2]
-                    # skipPoint = True
 
 class Board(object):
     def __init__(self, app):
@@ -207,29 +189,27 @@ class Board(object):
 
         self.rows = app.width
         self.cols = app.height
-        self.boardList = [[[self.hexColor,'board'] for j in range(self.cols)] for i in range(self.rows)]
-        # for row in range(self.rows):
-        #     for col in range(self.cols):
-        #         self.boardList[row][col] = [self.hexColor, 'board']
-
-    def fillBackgroundColor(self, color):
-        pass
+        self.boardList = ([[[self.hexColor,'board'] for j in range(self.cols)] 
+            for i in range(self.rows)])
 
     def updateBoard(self, app, canvas):
         if app.activeButton == 'brush':
             x,y = app.brush.cx, app.brush.cy
             r = app.brush.brushRadius
+
             if app.brush.brushRadius == 1:
                 for row in range(y, y+1):
                     for col in range(x, x+1):
                         app.brush.pointNum+=1
-                        app.board.boardList[row][col] = [app.brush.hexColor, 'brush', (col, row), app.brush.pointNum, r]
+                        app.board.boardList[row][col] = ([app.brush.hexColor, 
+                                'brush', (col, row), app.brush.pointNum, r])
                         print(row,col, app.board.boardList[row][col])
             else:
                  for row in range(y-(r//10), y+(r//10)):
                     for col in range(x-(r//10), x+(r//10)):
                         app.brush.pointNum+=1
-                        app.board.boardList[row][col] = [app.brush.hexColor, 'brush', (col, row), app.brush.pointNum, r]
+                        app.board.boardList[row][col] = ([app.brush.hexColor, 
+                                'brush', (col, row), app.brush.pointNum, r])
                         print(row,col, app.board.boardList[row][col])
         
         if app.activeButton == 'magicWand' and app.magicWand.isEnclosed == False:
@@ -247,7 +227,6 @@ class Brush(object):
         self.hexColor = "#%02x%02x%02x" % self.rgbColor
 
         self.texture = 'pen'
-        #self.brushSize = app.brushSize
         self.brushRadius = 1
         self.pointNum = 0
 
@@ -256,32 +235,35 @@ class Brush(object):
         self.oldX = None
         self.oldY = None
 
-    def changeColor(self, color):
-        pass
-
-    # def changeSize(self):
-    #     self.brushRadius = changeSize(app)
-
-    def changeTexture(self, texture):
-        pass
-
     def draw(self, event, canvas):
         canvas.create_line(self.cx, self.cy, event.x, event.y,
                             width=self.brushRadius, fill=self.hexColor,
                             capstyle=ROUND, smooth = TRUE, splinesteps = 100)
         self.cx, self.cy = event.x, event.y
 
-    # def draw(self, canvas):
-    #     canvas.create_oval(self.cx+self.r, self.cy+self.r, 
-    #         self.cx-self.r, self.cy-self.r, fill = self.hexColor)
+class BlendingTool(Brush):
+    def __init__(self, app):
+        super().__init__(self)
+        self.blendedColors = None
+        self.brushRadius = 20
+    
+    def getMidpoints(self, rgb1, rgb2, midpoints):
+        interval1 = (rgb1[0] - rgb2[0])//midpoints
+        interval2 = (rgb[1] - rgb[1])//midpoints
+        interval3 = (rgb[2] - rgb[2])//midpoints
 
-class BlendingTool(object):
-    def __init__(self):
-        self.cx = None
-        self.cy = None
+        midpointList = []
+        for point in range(midpoints):
+            midpointList.append(tuple(rgb1[0]+interval1, rgb[1]+interval2, 
+                rgb[2]+interval3))
 
-    def blendColors(self):
-        pass
+        return midpointList
+
+    def getColors(self, event, board):
+        x,y = self.cx, self.cy
+        for row in range(y-(r//10), y+(r//10)):
+            for col in range(x-(r//10), x+(r//10)):
+                pass
 
 class Eraser(object):
     def __init__(self):
@@ -358,7 +340,8 @@ class MagicWand(object):
         index = 0
         for row in range(self.minRow,self.maxRow+1):
 #            for col in range(self.colBounds[index][0], self.colBounds[index][1]):
-            canvas.create_line(self.colBounds[index][0], row, self.colBounds[index][1], row, fill = self.defaultColor)
+            canvas.create_line(self.colBounds[index][0], row, 
+                self.colBounds[index][1], row, fill = self.defaultColor)
             index+=1
 
     def moveArea(self, app, event, canvas):
@@ -368,13 +351,7 @@ class MagicWand(object):
         self.oldDrawnPointsInArea = copy.deepcopy(self.drawnPointsInArea)
         print(self.oldDrawnPointsInArea)
         self.hasOldPoints = True
-        # self.newBoard = [[[self.defaultColor,'board'] for j in range(len(self.boardList[0]))] for i in range(len(self.boardList))]
-        # self.testDraw(canvas)
-        # for row in range(len(self.boardList)):
-        #     for col in range(len(self.boardList[0])):
-        #         if (('selected' in self.boardList[row][col]) and 
-        #             ('brush' in self.boardList[row][col])):
-        #             self.newBoard[row+distY][col+distX] = self.boardList[row][col]
+
         for point in range(len(self.drawnPointsInArea)):
             coords = self.drawnPointsInArea[point][1][2]
             xCoord, yCoord = coords[0], coords[1]
@@ -387,15 +364,13 @@ class MagicWand(object):
         pointDict = dict()
         for row in range(len(self.boardList)):
             for col in range(len(self.boardList[0])):
-                if 'selected' in self.boardList[row][col] and 'brush' in self.boardList[row][col]:
+                if ('selected' in self.boardList[row][col] and 
+                    'brush' in self.boardList[row][col]):
                     tempList = copy.deepcopy(self.boardList[row][col])
                     pointNum = self.boardList[row][col][3]
                     pointDict[pointNum] = tempList[:3] + tempList[4:]
         self.drawnPointsInArea = sorted(list(pointDict.items()))
         print(self.drawnPointsInArea)
-
-    def mirrorSelectedArea(self):
-        pass
 
     def draw(self, event, canvas):
         canvas.create_line(self.cx, self.cy, event.x, event.y,
@@ -404,13 +379,13 @@ class MagicWand(object):
 
         self.cx, self.cy = event.x, event.y
 
-#CITATION: adapted basic Tkinter setup from http://www.krivers.net/15112-f18/notes/notes-oopy-animation.html
+#CITATION: adapted basic Tkinter setup from 
+# http://www.krivers.net/15112-f18/notes/notes-oopy-animation.html
 def run(width=300, height=300):
     def drawAllWrapper(app, canvas, event):
         drawAll(app, canvas, event)
 
     def mousePressedWrapper(app, event, canvas):
-        #mousePressed(app, event)
         mouseDragged(app, event, canvas)
 
 # Set up data and call init
