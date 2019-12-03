@@ -43,10 +43,6 @@ def __init__(app, root, canvas):
     app.mouseDrag = False
     app.hasImage = False
 
-def changeSize(app):
-    if app.activeButton == 'brush':
-        app.brush.brushRadius = app.changeSizeButton.get()
-
 def usePicture(app, root, canvas):
     window = Toplevel(root)
 
@@ -181,6 +177,10 @@ def drawAll(app, canvas, event):
                     startPoint = point
                     startPointCoords = app.magicWand.drawnPointsInArea[point][1][2]
 
+    elif app.activeButton == "blend":
+        app.blendingTool.draw(canvas, event, app.board.boardList)
+
+
 class Board(object):
     def __init__(self, app):
         self.rgbColor = (255,255,255)
@@ -189,7 +189,7 @@ class Board(object):
 
         self.rows = app.width
         self.cols = app.height
-        self.boardList = ([[[self.hexColor,'board'] for j in range(self.cols)] 
+        self.boardList = ([[[self.hexColor,'board', (j,i)] for j in range(self.cols)] 
             for i in range(self.rows)])
 
     def updateBoard(self, app, canvas):
@@ -246,25 +246,93 @@ class BlendingTool(Brush):
         super().__init__(self)
         self.blendedColors = None
         self.brushRadius = 20
+        self.colorSet = None
+        self.colorDict = None
+        self.blendedBoard = None
     
-    def getMidpoints(self, rgb1, rgb2, midpoints):
-        interval1 = (rgb1[0] - rgb2[0])//midpoints
-        interval2 = (rgb[1] - rgb[1])//midpoints
-        interval3 = (rgb[2] - rgb[2])//midpoints
+    def getColorMidpoints(self, rgb1, rgb2, midpoints):
+        interval1 = (rgb1[0] + rgb2[0])//midpoints
+        interval2 = (rgb1[1] + rgb2[1])//midpoints
+        interval3 = (rgb1[2] + rgb2[2])//midpoints
 
         midpointList = []
-        for point in range(midpoints):
-            midpointList.append(tuple(rgb1[0]+interval1, rgb[1]+interval2, 
-                rgb[2]+interval3))
+        for point in range(midpoints+1):
+            midpointList.append(tuple(((interval1*point), (interval2*point), 
+                (interval3*point))))
 
         return midpointList
 
     def getColors(self, event, board):
+        colorSet = set()
+        boardList = []
         x,y = self.cx, self.cy
+        r = self.brushRadius
         for row in range(y-(r//10), y+(r//10)):
             for col in range(x-(r//10), x+(r//10)):
-                pass
+                colorSet.add(board[row][col][0])
+                boardList.append(board[row][col])
+        self.boardList = boardList
+        self.colorSet = colorSet
+    
+    def canBlend(self):
+        return (len(self.colorSet) > 1)
+    
+    def seperateColors(self):
+        colorDict = dict()
+        for i in range(len(self.boardList)):
+            point = self.boardList[i]
+            print(point, self.colorSet)
+            colorDict[point[0]] = (colorDict.get(point[0], []) + [point[2]])
+        self.colorDict = colorDict
+    
+    @staticmethod
+    def distance(x1, y1, x2, y2):
+        return (((x1-x2)**2)+((y1-y2)**2))
+    
+    @staticmethod
+    def convertToRGB(hexadecimal):
+        #CITATION: conversion code from https://stackoverflow.com/a/29643643
+        h = hexadecimal.replace('#', '')
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
 
+    def blendBoard(self):
+        blendedBoard = []
+        if self.canBlend():
+            print(self.colorSet)
+            tempColorSet = copy.deepcopy(self.colorSet)
+            print(tempColorSet)
+            for color in self.colorSet:
+                print(tempColorSet)
+                otherColorSet = tempColorSet - {color}
+                for point in self.colorDict[color]:
+                    print(tempColorSet, otherColorSet)
+                    for otherColor in otherColorSet:
+                        for otherPoint in self.colorDict[otherColor]:
+                            if (BlendingTool.distance(point[0],point[1], 
+                                otherPoint[0], otherPoint[1]) < 2):
+                                rgb1 = BlendingTool.convertToRGB(color)
+                                rgb2 = BlendingTool.convertToRGB(otherColor)
+                                print(rgb1, rgb2)
+                                midpoints = 2
+
+                                midColors = self.getColorMidpoints(rgb1, rgb2, midpoints)
+                                blendedBoard.append([[midColors], [point, otherPoint]])
+            self.blendedBoard = blendedBoard
+
+    def draw(self, canvas, event, board):
+        self.cx, self.cy = event.x, event.y
+        self.getColors(event,board)
+        if self.canBlend():
+            self.seperateColors()
+            self.blendBoard()
+            print(self.blendedBoard)
+
+
+
+
+
+
+    
 class Eraser(object):
     def __init__(self):
         self.brushSize = None
